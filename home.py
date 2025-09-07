@@ -11,7 +11,7 @@ def hide_sidebar():
         <style> [data-testid="stSidebar"] { display: none; } </style>
     """, unsafe_allow_html=True)
 
-##hide_sidebar()
+hide_sidebar()
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="Centralized Registration",
@@ -203,4 +203,5 @@ else:
 
     if st.button("🔑 Proceed to Login", use_container_width=True):
         st.switch_page("pages/1_login.py")
+
 
