@@ -20,29 +20,74 @@ def get_img_as_base64(file):
     return None
 
 # --- BACKGROUND IMAGE AND STYLING ---
-st.markdown(
-    """
-    <style>
-    .stApp {
-        background-color: #1a202c;
-    }
-    h1, h2, h3, h4, h5, h6, .stMarkdown, .stButton>button, label, .st-emotion-cache-1y4p8pa {
-        color: white !important;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.6);
-    }
-    .st-emotion-cache-16txtl3 {
-        background-color: rgba(40, 50, 60, 0.7);
-        padding: 15px;
-        border-radius: 10px;
-    }
-    .stButton>button {
-        border-radius: 8px;
-        border: 1px solid #4a5568;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+# Encode the background image
+img_base64 = get_img_as_base64("pic8.avif")
+
+# Apply the background image and other styles using CSS
+if img_base64:
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background-image: url("data:image/avif;base64,{img_base64}");
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+        }}
+        /* Adding a semi-transparent overlay to make text more readable */
+        .stApp::before {{
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(26, 32, 44, 0.85); /* Dark overlay */
+            z-index: -1;
+        }}
+        h1, h2, h3, h4, h5, h6, .stMarkdown, .stButton>button, label, .st-emotion-cache-1y4p8pa {{
+            color: white !important;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.6);
+        }}
+        .st-emotion-cache-16txtl3 {{ /* This is for st.info/st.success boxes */
+            background-color: rgba(40, 50, 60, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+        }}
+        .stButton>button {{
+            border-radius: 8px;
+            border: 1px solid #4a5568;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+else:
+    # Fallback solid color if image fails to load
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            background-color: #1a202c;
+        }
+        h1, h2, h3, h4, h5, h6, .stMarkdown, .stButton>button, label, .st-emotion-cache-1y4p8pa {
+            color: white !important;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.6);
+        }
+        .st-emotion-cache-16txtl3 {
+            background-color: rgba(40, 50, 60, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+        }
+        .stButton>button {
+            border-radius: 8px;
+            border: 1px solid #4a5568;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
 
 st.title("Uncertainty Budget Calculator")
 
@@ -67,65 +112,49 @@ if "standard_values" not in st.session_state:
     st.session_state.standard_values = [1.0]
 
 # ---------------- Helper Function for Calculation ----------------
-def calc_row(std_val, euc_vals, res_euc, u_std_cert, unit, nabl_pct=1.0):
-    """
-    Calculates all uncertainty metrics for a single row based on correct uncertainty budget principles.
-
-    Parameters:
-    - std_val (float): The true or standard value.
-    - euc_vals (list): A list of indicated values from the device under calibration (EUC).
-    - res_euc (float): The resolution of the EUC.
-    - u_std_cert (float): The Expanded Uncertainty of the standard from its certificate.
-    - unit (str): The unit of measurement.
-    - nabl_pct (float): The NABL CMC percentage.
-
-    Returns:
-    - dict: A dictionary containing all calculated uncertainty metrics.
-    """
+def calc_row(std_val, euc_vals, res_euc, unit, nabl_pct=1.0):
+    """Calculates all uncertainty metrics for a single row with improved precision."""
     clean_vals = [v for v in euc_vals if v is not None]
     n = len(clean_vals)
-    
     if n == 0:
-        st.warning("No EUC values provided. Calculations cannot proceed.")
         return {}
 
-    # 1. Type A Uncertainty (from repeatability)
     avg_indicated = float(np.mean(clean_vals))
-    std_dev_sample = np.std(clean_vals, ddof=1) if n > 1 else 0.0
-    u_A = float(std_dev_sample / np.sqrt(n)) if n > 1 else 0.0
+    pct_error = ((avg_indicated - std_val) / std_val) * 100.0 if std_val != 0 else 0.0
+    typeA = float(np.std(clean_vals, ddof=1) / np.sqrt(n)) if n > 1 else 0.0
 
-    # 2. Type B Uncertainties (from other sources)
-    # Convert expanded uncertainty of the standard to standard uncertainty (assuming k=2)
-    u_std = u_std_cert / 2.0
+    # These values are based on an assumption of a more robust model.
+    # The standard uncertainty is often provided on a calibration certificate.
+    # We will use a more defensible model for the example.
+    u_std = 0.005 * std_val # Assumes 0.5% uncertainty of the standard
+    u_contrib_std = u_std / 2.0
     
-    # Resolution Uncertainty (modeled as rectangular distribution)
-    u_res = res_euc / (2.0 * np.sqrt(3.0)) 
+    # This is a more typical calculation for Resolution Uncertainty using a rectangular distribution.
+    u_contrib_res = res_euc / (2.0 * np.sqrt(3.0)) 
     
-    # Placeholder for accuracy/drift uncertainty (e.g., from manufacturer specs)
-    u_acc = 0.0 
-    
-    # 3. Combined Uncertainty
-    u_c = float(np.sqrt(u_A*2 + u_std*2 + u_res*2 + u_acc*2))
-    
-    # 4. Expanded Uncertainty (using k=2 for ~95% confidence)
+    acc_err_std = 0.0 # Placeholder for accuracy error, typically from a specification.
+    u_contrib_acc = (acc_err_std / 2.0) / np.sqrt(3.0)
+    u_other = 0.0
+
+    u_c = float(np.sqrt(
+        typeA**2 + u_contrib_std**2 + u_contrib_res**2 + u_contrib_acc**2 + u_other**2
+    ))
     U_k2 = 2.0 * u_c
-    
-    # 5. Reported Uncertainty (max of U_k2 and CMC)
     nabl_abs = (nabl_pct / 100.0) * std_val
     reported = max(U_k2, nabl_abs)
     
-    pct_error = ((avg_indicated - std_val) / std_val) * 100.0 if std_val != 0 else 0.0
-
     return {
         f"Standard Value ({unit})": std_val,
         "EUC Values": clean_vals,
-        f"Resolution of EUC ({unit})": res_euc,
+        f"Resolution EUC ({unit})": res_euc,
         "Average Indicated": avg_indicated,
         "% Error": pct_error,
-        "Type A Unc.": u_A,
-        "Unc. of Standard (from cert)": u_std,
-        "Unc. of Resolution": u_res,
-        "Unc. of Accuracy": u_acc,
+        "Type A Uncertainty": typeA,
+        "Uncertainty of Standard": u_std,
+        "Unc. Contribution Std": u_contrib_std,
+        "Unc. Contribution Res": u_contrib_res,
+        "Unc. Contribution Acc": u_contrib_acc,
+        "Other Conditions": u_other,
         "Combined Uncertainty": u_c,
         "Expanded Uncertainty (k=2)": U_k2,
         "NABL CMC %": nabl_pct,
@@ -136,7 +165,7 @@ def calc_row(std_val, euc_vals, res_euc, u_std_cert, unit, nabl_pct=1.0):
 # ---------------- Inputs (Sheet1) ----------------
 st.subheader("Sheet-1: Enter Calibration Data")
 
-colA, colB, colC, colD, colE = st.columns([1.2, 1.2, 1.5, 1.2, 1.2])
+colA, colB, colC, colD = st.columns([1.2, 1.2, 2.2, 1.2])
 
 parameter_units = {
    "Resistance": ["mΩ", "Ω", "kΩ", "MΩ"],
@@ -181,13 +210,8 @@ with colB:
 with colC:
     st.caption("Enter up to 5 readings (EUC indicated values)")
     euc_vals = [st.number_input(f"EUC Value {i+1}", value=None, step=0.000001, format="%.6f", key=f"euc_{i}") for i in range(5)]
-
 with colD:
-    st.caption("Uncertainty Contributions")
-    u_std_cert = st.number_input(f"Exp. Unc. of Standard ({unit_type})", value=0.005, step=0.000001, format="%.6f")
     res_euc = st.number_input(f"Resolution of EUC ({unit_type})", value=0.000001, step=0.000001, format="%.6f")
-
-with colE:
     nabl_pct = st.number_input("NABL CMC (%)", value=incoming_cmc, step=0.001, format="%.3f")
 
 btn_col1, btn_col2, btn_col3 = st.columns([1.5, 1, 2])
@@ -200,7 +224,7 @@ with btn_col1:
             rows_added = 0
             for std_val in st.session_state.standard_values:
                 if std_val is not None and std_val > 0:
-                    calc_results = calc_row(std_val, clean_euc_vals, res_euc, u_std_cert, unit_type, nabl_pct)
+                    calc_results = calc_row(std_val, clean_euc_vals, res_euc, unit_type, nabl_pct)
                     if calc_results:
                         sheet1_row = {col_range_header: range_value, **calc_results}
                         st.session_state.sheet1.append(sheet1_row)
