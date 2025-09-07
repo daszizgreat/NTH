@@ -147,7 +147,7 @@ if not filtered_df.empty:
             st.session_state['selected_cmc'] = cmc_value
 
             # Switch to the calculator page
-            st.switch_page("pages/3_Calculator.py")
+            st.switch_page("pages/3_calculator.py")
 
         except (KeyError, IndexError):
             st.error("Could not retrieve the CMC value for the selected row. Please check the index and try again.")
@@ -162,3 +162,4 @@ def hide_sidebar():
 
 
 hide_sidebar()
+
