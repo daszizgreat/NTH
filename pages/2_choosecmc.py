@@ -22,7 +22,7 @@ def get_base64_image(image_path):
         return base64.b64encode(image_file.read()).decode()
 
 # Path to your background image
-BACKGROUND_IMAGE_PATH = r"C:pic4.jpg"
+BACKGROUND_IMAGE_PATH = r"pic4.jpg"
 base64_image = get_base64_image(BACKGROUND_IMAGE_PATH)
 
 # Inject custom CSS for background if image is found
@@ -159,5 +159,6 @@ def hide_sidebar():
     st.markdown("""
         <style> [data-testid="stSidebar"] { display: none; } </style>
     """, unsafe_allow_html=True)
+
 
 hide_sidebar()
