@@ -1,0 +1,5 @@
+certifi==2025.6.15
+numpy==2.3.2
+pandas==2.3.2
+pymongo==4.14.1
+streamlit==1.46.0
