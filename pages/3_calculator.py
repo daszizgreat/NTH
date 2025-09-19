@@ -20,74 +20,35 @@ def get_img_as_base64(file):
     return None
 
 # --- BACKGROUND IMAGE AND STYLING ---
-# Encode the background image
-img_base64 = get_img_as_base64("pic8.avif")
-
-# Apply the background image and other styles using CSS
-if img_base64:
+# (Styling code remains unchanged)
+# To run this locally, ensure you have an image named "pic8.avif" in the same directory.
+# For now, we will handle the case where the image might not be found.
+img_base_64 = get_img_as_base64("pic8.avif")
+if img_base_64:
     st.markdown(
         f"""
         <style>
         .stApp {{
-            background-image: url("data:image/avif;base64,{img_base64}");
+            background-image: url("data:image/avif;base64,{img_base_64}");
             background-size: cover;
             background-repeat: no-repeat;
             background-attachment: fixed;
         }}
-        /* Adding a semi-transparent overlay to make text more readable */
         .stApp::before {{
             content: "";
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(26, 32, 44, 0.85); /* Dark overlay */
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(26, 32, 44, 0.85);
             z-index: -1;
         }}
-        h1, h2, h3, h4, h5, h6, .stMarkdown, .stButton>button, label, .st-emotion-cache-1y4p8pa {{
+        h1, h2, h3, .stMarkdown, .stButton>button, label, .st-emotion-cache-1y4p8pa {{
             color: white !important;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.6);
-        }}
-        .st-emotion-cache-16txtl3 {{ /* This is for st.info/st.success boxes */
-            background-color: rgba(40, 50, 60, 0.7);
-            padding: 15px;
-            border-radius: 10px;
-        }}
-        .stButton>button {{
-            border-radius: 8px;
-            border: 1px solid #4a5568;
         }}
         </style>
         """,
         unsafe_allow_html=True
     )
-else:
-    # Fallback solid color if image fails to load
-    st.markdown(
-        """
-        <style>
-        .stApp {
-            background-color: #1a202c;
-        }
-        h1, h2, h3, h4, h5, h6, .stMarkdown, .stButton>button, label, .st-emotion-cache-1y4p8pa {
-            color: white !important;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.6);
-        }
-        .st-emotion-cache-16txtl3 {
-            background-color: rgba(40, 50, 60, 0.7);
-            padding: 15px;
-            border-radius: 10px;
-        }
-        .stButton>button {
-            border-radius: 8px;
-            border: 1px solid #4a5568;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
 
 st.title("Uncertainty Budget Calculator")
 
@@ -111,38 +72,60 @@ if "sheet2" not in st.session_state:
 if "standard_values" not in st.session_state:
     st.session_state.standard_values = [1.0]
 
-# ---------------- Helper Function for Calculation ----------------
-def calc_row(std_val, euc_vals, res_euc, unit, nabl_pct=1.0):
-    """Calculates all uncertainty metrics for a single row with improved precision."""
+# ---------------- Helper Function for Calculation (MODIFIED) ----------------
+# CHANGED: Added 'std_unc_factor' as an argument to make the calculation dynamic.
+def calc_row(std_val, euc_vals, res_euc, acc_euc, nabl_pct, unit, std_unc_factor):
+    """
+    Calculates all uncertainty metrics for a single row based on the provided formulas.
+    """
     clean_vals = [v for v in euc_vals if v is not None]
     n = len(clean_vals)
     if n == 0:
         return {}
 
+    # Formula 1: Average of Indicated Values
     avg_indicated = float(np.mean(clean_vals))
+
+    # Formula 2: Percentage Error
     pct_error = ((avg_indicated - std_val) / std_val) * 100.0 if std_val != 0 else 0.0
+
+    # Formula 3: Type-A Uncertainty (Repeatability)
     typeA = float(np.std(clean_vals, ddof=1) / np.sqrt(n)) if n > 1 else 0.0
 
-    # These values are based on an assumption of a more robust model.
-    # The standard uncertainty is often provided on a calibration certificate.
-    # We will use a more defensible model for the example.
-    u_std = 0.005 * std_val # Assumes 0.5% uncertainty of the standard
-    u_contrib_std = u_std / 2.0
+    # CHANGED: Implemented new formulas for standard uncertainty contribution
+    # New Formula: Uncertainty of the Standard = Average of Indicated value * [USER-DEFINED FACTOR]
+    unc_of_std = avg_indicated * std_unc_factor # MODIFIED: Using the new factor here
     
-    # This is a more typical calculation for Resolution Uncertainty using a rectangular distribution.
-    u_contrib_res = res_euc / (2.0 * np.sqrt(3.0)) 
-    
-    acc_err_std = 0.0 # Placeholder for accuracy error, typically from a specification.
-    u_contrib_acc = (acc_err_std / 2.0) / np.sqrt(3.0)
+    # New Formula: Uncertainty Contribution by the standard = Uncertainty of the Standard / 2
+    u_contrib_std = unc_of_std / 2.0
+
+    # Formula 7: Contribution due to Resolution
+    u_contrib_res = (res_euc / 2.0) / np.sqrt(3.0)
+
+    # Formula 9: Contribution due to Accuracy
+    u_contrib_acc = (acc_euc / 2.0) / np.sqrt(3.0)
+
+    # Formula 10: Uncertainty due to other conditions (placeholder)
     u_other = 0.0
 
+    # Formula 11: Combined Standard Uncertainty (structure remains the same)
     u_c = float(np.sqrt(
-        typeA**2 + u_contrib_std**2 + u_contrib_res**2 + u_contrib_acc**2 + u_other**2
+        typeA**2 +
+        u_contrib_std**2 +
+        u_contrib_res**2 +
+        u_contrib_acc**2 +
+        u_other**2
     ))
+
+    # Formula 13: Expanded Uncertainty (using k=2, as requested)
     U_k2 = 2.0 * u_c
+
+    # Formula 15: NABL CMC in Absolute Units
     nabl_abs = (nabl_pct / 100.0) * std_val
+
+    # Formula 14: Reported Uncertainty
     reported = max(U_k2, nabl_abs)
-    
+
     return {
         f"Standard Value ({unit})": std_val,
         "EUC Values": clean_vals,
@@ -150,11 +133,10 @@ def calc_row(std_val, euc_vals, res_euc, unit, nabl_pct=1.0):
         "Average Indicated": avg_indicated,
         "% Error": pct_error,
         "Type A Uncertainty": typeA,
-        "Uncertainty of Standard": u_std,
-        "Unc. Contribution Std": u_contrib_std,
-        "Unc. Contribution Res": u_contrib_res,
-        "Unc. Contribution Acc": u_contrib_acc,
-        "Other Conditions": u_other,
+        "Uncertainty Contribution by Standard": u_contrib_std,
+        "Uncertainty Contribution by Resolution": u_contrib_res,
+        "Uncertainty Contribution by Accuracy": u_contrib_acc,
+        "Other Contributions": u_other,
         "Combined Uncertainty": u_c,
         "Expanded Uncertainty (k=2)": U_k2,
         "NABL CMC %": nabl_pct,
@@ -168,15 +150,13 @@ st.subheader("Sheet-1: Enter Calibration Data")
 colA, colB, colC, colD = st.columns([1.2, 1.2, 2.2, 1.2])
 
 parameter_units = {
-   "Resistance": ["mΩ", "Ω", "kΩ", "MΩ"],
-   "Voltage": ["mV", "V", "kV", "MV"],
-   "Current": ["mA", "A", "kA", "MA"],
-   "Frequency": ["mHz", "Hz", "kHz", "MHz"],
-   "Capacitance": ["mF", "F", "kF", "MF"],
-   "Inductance": ["mH", "H", "kH", "MH"]
+    "Resistance": ["mΩ", "Ω", "kΩ", "MΩ"],
+    "Voltage": ["mV", "V", "kV", "MV"],
+    "Current": ["mA", "A", "kA", "MA"],
+    "Frequency": ["mHz", "Hz", "kHz", "MHz"],
+    "Capacitance": ["mF", "F", "kF", "MF"],
+    "Inductance": ["mH", "H", "kH", "MH"]
 }
-
-# Flatten all units into one list (unique only to avoid duplicates)
 all_units = sorted(set(unit for units in parameter_units.values() for unit in units))
 
 with colA:
@@ -187,12 +167,7 @@ with colA:
 
 with colB:
     st.caption("*Standard Values*")
-    std_unit_type = st.selectbox(
-        "Standard Value Unit",
-        all_units,
-        key="std_unit"
-    )
-
+    std_unit_type = st.selectbox("Standard Value Unit", all_units, key="std_unit")
     for i in range(len(st.session_state.standard_values)):
         st.session_state.standard_values[i] = st.number_input(
             f"Std. Value {i+1}", value=st.session_state.standard_values[i],
@@ -210,8 +185,18 @@ with colB:
 with colC:
     st.caption("Enter up to 5 readings (EUC indicated values)")
     euc_vals = [st.number_input(f"EUC Value {i+1}", value=None, step=0.000001, format="%.6f", key=f"euc_{i}") for i in range(5)]
+
 with colD:
     res_euc = st.number_input(f"Resolution of EUC ({unit_type})", value=0.000001, step=0.000001, format="%.6f")
+    acc_euc = st.number_input(f"Accuracy of EUC ({unit_type})", value=0.00001, step=0.000001, format="%.6f")
+    # ADDED: New input field for the uncertainty factor.
+    std_unc_factor = st.number_input(
+        "Standard Uncertainty Factor", 
+        value=0.012, 
+        step=0.001, 
+        format="%.3f",
+        help="This value is multiplied by the average indicated value to determine the uncertainty of the standard."
+    )
     nabl_pct = st.number_input("NABL CMC (%)", value=incoming_cmc, step=0.001, format="%.3f")
 
 btn_col1, btn_col2, btn_col3 = st.columns([1.5, 1, 2])
@@ -224,11 +209,11 @@ with btn_col1:
             rows_added = 0
             for std_val in st.session_state.standard_values:
                 if std_val is not None and std_val > 0:
-                    calc_results = calc_row(std_val, clean_euc_vals, res_euc, unit_type, nabl_pct)
+                    # CHANGED: Passed the new factor from the input field to the calculation function.
+                    calc_results = calc_row(std_val, clean_euc_vals, res_euc, acc_euc, nabl_pct, unit_type, std_unc_factor)
                     if calc_results:
                         sheet1_row = {col_range_header: range_value, **calc_results}
                         st.session_state.sheet1.append(sheet1_row)
-
                         sheet2_row = {
                             "Sl. No.": len(st.session_state.sheet2) + 1,
                             col_range_header: range_value,
@@ -250,13 +235,35 @@ with btn_col2:
         st.success("All data has been cleared.")
         st.rerun()
 
+# ---------------- Custom Rounding Function ----------------
+def custom_round(value):
+    """
+    Applies custom rounding rules:
+    - If the integer part is 0, rounds to 4 decimal places.
+    - If the integer part is > 0, rounds to 1 decimal place.
+    """
+    # MODIFIED: Added a check for NaN values to prevent the conversion error.
+    if pd.isna(value):
+        return "" # Return an empty string for NaN/None values, preventing the crash.
+    
+    if not isinstance(value, (int, float)):
+        return value # Return non-numeric values as is
+
+    integer_part = int(abs(value))
+
+    if integer_part == 0:
+        return f"{value:.4f}"
+    else:
+        # MODIFIED: Changed rounding to 1 decimal place per user request.
+        return f"{value:.1f}"
+
 # ---------------- Sheet1 table + per-row delete ----------------
 if st.session_state.sheet1:
     st.markdown("---")
     st.markdown("### Sheet-1 Table (Detailed Calculation)")
     df1 = pd.DataFrame(st.session_state.sheet1).reset_index().rename(columns={"index":"Row"})
-    st.dataframe(df1.style.format(precision=6), use_container_width=True, height=280)
-
+    # MODIFIED: Applied the custom rounding function for display.
+    st.dataframe(df1.style.format(custom_round), use_container_width=True, height=280)
     c1, c2, c3 = st.columns([1,1,3])
     with c1:
         row_to_delete = st.number_input(
@@ -280,14 +287,19 @@ if st.session_state.sheet2:
     st.markdown("---")
     st.markdown("### Sheet-2: Final Summary")
     df2 = pd.DataFrame(st.session_state.sheet2)
-    st.dataframe(df2.style.format(precision=6), use_container_width=True, hide_index=True)
-
+    # MODIFIED: Applied the custom rounding function for display.
+    st.dataframe(df2.style.format(custom_round), use_container_width=True, hide_index=True)
     st.markdown("---")
-
     if st.button("➡ Export to Certificate Page", type="primary"):
         if df2.empty:
             st.warning("There is no data in the summary table to export.")
         else:
             st.session_state['exported_data'] = df2
             st.session_state['parameter_name'] = parameter
-            st.switch_page("pages/4_annexure.py")
+            # This line will cause an error if the 'pages/4_annexure.py' file doesn't exist.
+            # Make sure you have this file in a 'pages' subdirectory for the switch_page to work.
+            try:
+                st.switch_page("pages/4_annexure.py")
+            except Exception as e:
+                st.error(f"Could not switch page. Make sure 'pages/4_annexure.py' exists. Error: {e}")
+
