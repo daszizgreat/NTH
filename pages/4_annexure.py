@@ -218,7 +218,6 @@ if st.session_state.certificate_html_content:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(st.session_state.certificate_html_content)
             
-            st.success(f"File saved to server at: `{file_path}`")
             st.session_state.file_has_been_saved = True
 
         if st.session_state.file_has_been_saved:
@@ -242,5 +241,6 @@ def hide_sidebar():
     st.markdown("""
         <style> [data-testid="stSidebar"] { display: none; } </style>
     """, unsafe_allow_html=True)
+
 
 hide_sidebar()
