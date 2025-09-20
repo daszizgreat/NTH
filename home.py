@@ -1,24 +1,26 @@
 import streamlit as st
 import pymongo
-
 from datetime import date
 import base64
 import os
 import smtplib
 from email.mime.text import MIMEText
 import re  # For input validation
-def hide_sidebar():
-    st.markdown("""
-        <style> [data-testid="stSidebar"] { display: none; } </style>
-    """, unsafe_allow_html=True)
 
-hide_sidebar()
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="Centralized Registration",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
+
+# --- HIDE SIDEBAR ---
+def hide_sidebar():
+    st.markdown("""
+        <style> [data-testid="stSidebar"] { display: none; } </style>
+    """, unsafe_allow_html=True)
+
+hide_sidebar()
 
 # --- HELPER FUNCTIONS ---
 
@@ -29,17 +31,19 @@ def is_valid_email(email):
 
 def send_confirmation_email(email_id, name):
     """Sends a registration confirmation email with hardcoded credentials."""
+    # IMPORTANT: In a production environment, use environment variables or Streamlit secrets
+    # to store sensitive information like email credentials.
     sender_email = 'teamnexusofficial25@gmail.com'
     sender_password = 'ared rxhz jhvs vdif'
 
-    subject = "✅ Registration Successful - Welcome to National Test House !"
+    subject = "✅ Registration Successful - Welcome to National Test House!"
     body = f"""Hi {name},
 
 Welcome aboard!
 
-Your registration with National test house  was successful. We are thrilled to have you as part of our community.
+Your registration with National Test House was successful. We are thrilled to have you as part of our community.
 
-You can now proceed to log in.
+You can now proceed to log in to your new account.
 
 Best regards,
 National Test House Team!
@@ -58,13 +62,15 @@ National Test House Team!
 # --- BACKGROUND IMAGE & CSS ---
 def get_base64_image(image_path):
     """Reads an image file and returns its base64 encoded version."""
-    if not os.path.exists(image_path):
-        st.error(f"Image not found at path: {image_path}")
+    try:
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode()
+    except FileNotFoundError:
+        st.warning(f"Image not found at path: {image_path}. Background will be disabled.")
         return None
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode()
 
-background_image_path = "pic4.jpg"
+# Use a relative path for better portability
+background_image_path = "pic4.jpg" 
 img_base64 = get_base64_image(background_image_path)
 
 if img_base64:
@@ -80,7 +86,7 @@ if img_base64:
         
         .main-title {{
             font-family: 'Gaegu', cursive; font-size: 3.5rem; text-align: center;
-            color: black; /* This was already here, but the inline style below makes sure it applies */
+            color: black;
             padding-bottom: 1rem;
         }}
         
@@ -115,12 +121,12 @@ MONGO_CONNECTION_STRING = "mongodb+srv://soumyadeepdas11sc2020_db_user:bHAVX6vEM
 
 @st.cache_resource
 def get_mongo_client():
-    """Establishes a connection to MongoDB and caches it."""
+    """Establishes and caches a connection to MongoDB."""
     try:
         client = pymongo.MongoClient(MONGO_CONNECTION_STRING)
         client.admin.command('ping') # Verify connection is successful
         return client
-    except Exception as e:
+    except pymongo.errors.ConnectionFailure as e:
         st.error(f"Could not connect to the database: {e}")
         return None
 
@@ -139,29 +145,22 @@ if 'email_failed' not in st.session_state:
     st.session_state.email_failed = False
 
 # --- PAGE LAYOUT & LOGIC ---
-st.markdown('<h1 class="main-title" style="color: black;">Registration Info</h1>', unsafe_allow_html=True)
+st.markdown('<h1 class="main-title">Registration Info</h1>', unsafe_allow_html=True)
 
+# State 1: Show Registration Form
 if not st.session_state.registration_complete:
-    col1, col2 = st.columns(2, gap="large")
-
-    with col1:
-        st.image("pic1.png", use_container_width=True)
-
-    with col2:
-        with st.form("registration_form"):
-            name = st.text_input("🧑‍💼 Full Name")
-            email = st.text_input("📧 Email Address")
-            password = st.text_input("🔑 Create a Password", type="password")
-            confirm_password = st.text_input("🔒 Confirm Password", type="password")
-            birthdate = st.date_input("🎂 Birthdate", min_value=date(1940, 1, 1), max_value=date.today())
-            gender = st.selectbox("⚧️ Gender", ["Male", "Female", "Other", "Prefer not to say"])
-            submitted = st.form_submit_button("🚀 Launch Profile")
-
-        if st.button("🔑 Already have an account? Log In", use_container_width=True):
-            st.switch_page("pages/1_login.py")
+    with st.form("registration_form"):
+        name = st.text_input("🧑‍💼 Full Name", key="name")
+        email = st.text_input("📧 Email Address", key="email")
+        password = st.text_input("🔑 Create a Password", type="password", key="password")
+        confirm_password = st.text_input("🔒 Confirm Password", type="password", key="confirm_password")
+        birthdate = st.date_input("🎂 Birthdate", min_value=date(1940, 1, 1), max_value=date.today(), key="birthdate")
+        gender = st.selectbox("⚧️ Gender", ["Male", "Female", "Other", "Prefer not to say"], key="gender")
+        
+        submitted = st.form_submit_button("🚀 Launch Profile")
 
     if submitted:
-        if not all([name, email, password, confirm_password]):
+        if not all([name, email, password, confirm_password, birthdate, gender]):
             st.warning("⚠️ Please fill out all fields.")
         elif not is_valid_email(email):
             st.warning("📧 Please enter a valid email address.")
@@ -169,39 +168,48 @@ if not st.session_state.registration_complete:
             st.error("❌ Passwords do not match.")
         elif len(password) < 8:
             st.warning("🔑 Password must be at least 8 characters long.")
+        elif users_collection.find_one({"email": email}):
+            st.error("❌ This email address is already registered.")
         else:
-            if users_collection.find_one({"email": email}):
-                st.error("❌ This email address is already registered.")
-            else:
-                today = date.today()
-                age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
+            # All checks passed, proceed with registration
+            today = date.today()
+            age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
 
-                user_data = {
-                    "name": name,
-                    "email": email,
-                    "password": password,
-                    "birthdate": birthdate.isoformat(),
-                    "age": age,
-                    "gender": gender,
-                    "created_at": today.isoformat()
-                }
+            user_data = {
+                "name": name,
+                "email": email,
+                "password": password,  # Note: In production, hash passwords before storing
+                "birthdate": birthdate.isoformat(),
+                "age": age,
+                "gender": gender,
+                "created_at": today.isoformat()
+            }
 
-                try:
-                    users_collection.insert_one(user_data)
-                    if not send_confirmation_email(email, name):
-                        st.session_state.email_failed = True
-                    st.session_state.registration_complete = True
-                    st.session_state.user_name = name
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"An error occurred during registration: {e}")
+            try:
+                users_collection.insert_one(user_data)
+                if not send_confirmation_email(email, name):
+                    st.session_state.email_failed = True
+                
+                # Set state to change the page view
+                st.session_state.registration_complete = True
+                st.session_state.user_name = name
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"An error occurred during registration: {e}")
+
+    # "Already have an account" button outside the form logic
+    if st.button("🔑 Already have an account? Log In", use_container_width=True):
+        st.switch_page("pages/1_login.py")
+
+# State 2: Show Success Message
 else:
     st.balloons()
     st.success(f"✅ Welcome aboard, {st.session_state.user_name}!")
     st.info("Your registration is complete. A confirmation has been sent to your email.")
+    
     if st.session_state.email_failed:
         st.warning("Your account was created, but we couldn't send the confirmation email.")
 
     if st.button("🔑 Proceed to Login", use_container_width=True):
         st.switch_page("pages/1_login.py")
-
