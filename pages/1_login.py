@@ -15,7 +15,7 @@ def generate_otp(length=6):
 def send_otp_via_email(email_id, user_name, otp):
     """Sends the OTP to the user's email address."""
     sender_email = 'teamnexusofficial25@gmail.com'  # Your email
-    sender_password = 'qkmm yqcq vqtm vmoq'  # Your email app password
+    sender_password = 'ared rxhz jhvs vdif'  # Your email app password
     subject = "Your One-Time Password (OTP) for Sign In"
     body = f"""Hello {user_name},
 
@@ -205,4 +205,5 @@ else:
             time.sleep(2)
             st.switch_page("pages/main_home.py")
         else:
+
             st.error("❌ Invalid OTP. Please try again.")
