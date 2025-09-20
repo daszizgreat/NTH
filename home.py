@@ -30,7 +30,7 @@ def is_valid_email(email):
 def send_confirmation_email(email_id, name):
     """Sends a registration confirmation email with hardcoded credentials."""
     sender_email = 'teamnexusofficial25@gmail.com'
-    sender_password = 'qkmm yqcq vqtm vmoq'
+    sender_password = 'ared rxhz jhvs vdif'
 
     subject = "✅ Registration Successful - Welcome to National Test House !"
     body = f"""Hi {name},
@@ -204,4 +204,5 @@ else:
 
     if st.button("🔑 Proceed to Login", use_container_width=True):
         st.switch_page("pages/1_login.py")
+
 
