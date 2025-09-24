@@ -20,7 +20,6 @@ def get_img_as_base64(file):
     return None
 
 # --- BACKGROUND IMAGE AND STYLING ---
-# (Styling code remains unchanged)
 # To run this locally, ensure you have an image named "pic8.avif" in the same directory.
 # For now, we will handle the case where the image might not be found.
 img_base_64 = get_img_as_base64("pic8.avif")
@@ -72,8 +71,7 @@ if "sheet2" not in st.session_state:
 if "standard_values" not in st.session_state:
     st.session_state.standard_values = [1.0]
 
-# ---------------- Helper Function for Calculation (MODIFIED) ----------------
-# CHANGED: Added 'std_unc_factor' as an argument to make the calculation dynamic.
+# ---------------- Helper Function for Calculation ----------------
 def calc_row(std_val, euc_vals, res_euc, acc_euc, nabl_pct, unit, std_unc_factor):
     """
     Calculates all uncertainty metrics for a single row based on the provided formulas.
@@ -92,9 +90,8 @@ def calc_row(std_val, euc_vals, res_euc, acc_euc, nabl_pct, unit, std_unc_factor
     # Formula 3: Type-A Uncertainty (Repeatability)
     typeA = float(np.std(clean_vals, ddof=1) / np.sqrt(n)) if n > 1 else 0.0
 
-    # CHANGED: Implemented new formulas for standard uncertainty contribution
     # New Formula: Uncertainty of the Standard = Average of Indicated value * [USER-DEFINED FACTOR]
-    unc_of_std = avg_indicated * std_unc_factor # MODIFIED: Using the new factor here
+    unc_of_std = avg_indicated * std_unc_factor
     
     # New Formula: Uncertainty Contribution by the standard = Uncertainty of the Standard / 2
     u_contrib_std = unc_of_std / 2.0
@@ -108,7 +105,7 @@ def calc_row(std_val, euc_vals, res_euc, acc_euc, nabl_pct, unit, std_unc_factor
     # Formula 10: Uncertainty due to other conditions (placeholder)
     u_other = 0.0
 
-    # Formula 11: Combined Standard Uncertainty (structure remains the same)
+    # Formula 11: Combined Standard Uncertainty
     u_c = float(np.sqrt(
         typeA**2 +
         u_contrib_std**2 +
@@ -189,7 +186,6 @@ with colC:
 with colD:
     res_euc = st.number_input(f"Resolution of EUC ({unit_type})", value=0.000001, step=0.000001, format="%.6f")
     acc_euc = st.number_input(f"Accuracy of EUC ({unit_type})", value=0.00001, step=0.000001, format="%.6f")
-    # ADDED: New input field for the uncertainty factor.
     std_unc_factor = st.number_input(
         "Standard Uncertainty Factor", 
         value=0.012, 
@@ -209,7 +205,6 @@ with btn_col1:
             rows_added = 0
             for std_val in st.session_state.standard_values:
                 if std_val is not None and std_val > 0:
-                    # CHANGED: Passed the new factor from the input field to the calculation function.
                     calc_results = calc_row(std_val, clean_euc_vals, res_euc, acc_euc, nabl_pct, unit_type, std_unc_factor)
                     if calc_results:
                         sheet1_row = {col_range_header: range_value, **calc_results}
@@ -242,19 +237,17 @@ def custom_round(value):
     - If the integer part is 0, rounds to 4 decimal places.
     - If the integer part is > 0, rounds to 1 decimal place.
     """
-    # MODIFIED: Added a check for NaN values to prevent the conversion error.
     if pd.isna(value):
-        return "" # Return an empty string for NaN/None values, preventing the crash.
+        return "" 
     
     if not isinstance(value, (int, float)):
-        return value # Return non-numeric values as is
+        return value
 
     integer_part = int(abs(value))
 
     if integer_part == 0:
         return f"{value:.4f}"
     else:
-        # MODIFIED: Changed rounding to 1 decimal place per user request.
         return f"{value:.1f}"
 
 # ---------------- Sheet1 table + per-row delete ----------------
@@ -262,8 +255,14 @@ if st.session_state.sheet1:
     st.markdown("---")
     st.markdown("### Sheet-1 Table (Detailed Calculation)")
     df1 = pd.DataFrame(st.session_state.sheet1).reset_index().rename(columns={"index":"Row"})
-    # MODIFIED: Applied the custom rounding function for display.
-    st.dataframe(df1.style.format(custom_round), use_container_width=True, height=280)
+    
+    # --- FIX APPLIED HERE ---
+    # Identify all columns except the one that contains lists
+    cols_to_format = [col for col in df1.columns if col != "EUC Values"]
+    # Apply the formatter only to the specified subset of columns
+    st.dataframe(df1.style.format(custom_round, subset=cols_to_format), use_container_width=True, height=280)
+    # --- END OF FIX ---
+
     c1, c2, c3 = st.columns([1,1,3])
     with c1:
         row_to_delete = st.number_input(
@@ -287,7 +286,6 @@ if st.session_state.sheet2:
     st.markdown("---")
     st.markdown("### Sheet-2: Final Summary")
     df2 = pd.DataFrame(st.session_state.sheet2)
-    # MODIFIED: Applied the custom rounding function for display.
     st.dataframe(df2.style.format(custom_round), use_container_width=True, hide_index=True)
     st.markdown("---")
     if st.button("➡ Export to Certificate Page", type="primary"):
@@ -302,4 +300,3 @@ if st.session_state.sheet2:
                 st.switch_page("pages/4_annexure.py")
             except Exception as e:
                 st.error(f"Could not switch page. Make sure 'pages/4_annexure.py' exists. Error: {e}")
-
