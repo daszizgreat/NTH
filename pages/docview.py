@@ -1,61 +1,79 @@
 import streamlit as st
-import os
 import datetime
+from pymongo import MongoClient
+import pytz # Required for timezone conversions
 
 # --- Page Configuration ---
 st.set_page_config(layout="wide", page_title="Document Viewer")
 st.title("📄 Document Viewer & Manager")
 
-# --- Core Functions ---
+# --- START: MONGODB MODIFICATIONS ---
 
-def get_saved_files(directory):
-    """Scans a directory for .html files and returns their details."""
-    files_details = []
-    # Check if the provided absolute path exists
-    if not os.path.isdir(directory):
-        st.error(f"Error: The specified directory does not exist or is not a directory.")
-        st.code(directory) # Display the path for easier debugging
-        return files_details
+# ⚠️ WARNING: Hardcoding credentials is NOT recommended for production.
+# This method is suitable for local testing only.
+MONGO_URI = "mongodb+srv://soumyadeepdas11sc2020_db_user:bHAVX6vEMTGIL2mo@nthofficial.qr39fql.mongodb.net/?retryWrites=true&w=majority&appName=nthofficial"
 
-    for filename in os.listdir(directory):
-        if filename.endswith(".html"):
-            file_path = os.path.join(directory, filename)
-            try:
-                # Get modification time and convert to a datetime object
-                mod_time = os.path.getmtime(file_path)
-                mod_datetime = datetime.datetime.fromtimestamp(mod_time)
-                
-                files_details.append({
-                    "name": filename,
-                    "path": file_path,
-                    "date": mod_datetime.date(), # Store as date object for filtering
-                    "datetime": mod_datetime # Store full datetime for sorting
-                })
-            except Exception as e:
-                st.error(f"Could not read metadata for {filename}: {e}")
-    return files_details
+@st.cache_resource
+def init_connection():
+    """Initializes and returns a MongoDB client connection."""
+    try:
+        client = MongoClient(MONGO_URI)
+        client.admin.command('ping')
+        return client
+    except Exception as e:
+        st.error(f"Failed to connect to MongoDB: {e}")
+        return None
+
+def get_documents_from_db(db_collection):
+    """Fetches document details from the MongoDB collection."""
+    documents_details = []
+    try:
+        # Fetch only the necessary fields to be efficient
+        cursor = db_collection.find({}, {"filename": 1, "saved_at_utc": 1, "html_content": 1, "_id": 0})
+        
+        # Define the local timezone for user-friendly display
+        local_tz = pytz.timezone("Asia/Kolkata")
+
+        for doc in cursor:
+            # Convert the UTC datetime from the DB to the local timezone
+            saved_datetime_local = doc['saved_at_utc'].astimezone(local_tz)
+
+            documents_details.append({
+                "name": doc.get("filename", "No Filename"),
+                "date": saved_datetime_local.date(), # Store as date object for filtering
+                "datetime": saved_datetime_local,     # Store full datetime for sorting
+                "html_content": doc.get("html_content", "<p>Error: HTML content not found.</p>")
+            })
+    except Exception as e:
+        st.error(f"An error occurred while fetching data from the database: {e}")
+    return documents_details
+
+# --- END: MONGODB MODIFICATIONS ---
+
 
 # --- Main Application ---
 
-# Define the directory where files are saved
-# **THIS IS THE LINE THAT WAS CHANGED**
-SAVE_DIR = r"pages\previous_tests"
+# Initialize connection
+client = init_connection()
 
-# Get the list of all saved annexures
-all_files = get_saved_files(SAVE_DIR)
+# Get the list of all saved annexures from the database
+if client:
+    db = client.nthofficial
+    collection = db.certificates
+    all_files = get_documents_from_db(collection)
+else:
+    all_files = []
+    st.warning("Could not connect to the database. No documents can be displayed.")
+
 
 # --- Filtering and Sorting Controls ---
 with st.expander("🔍 Find Documents & Filter Results", expanded=True):
-    # Use columns for a more compact layout
     search_col, date_col, sort_col = st.columns([2, 2, 1])
 
     with search_col:
-        # 1. Search by Name
         search_query = st.text_input("Search by filename", placeholder="e.g., Annexure_25EL16E6N")
     
     with date_col:
-        # 2. Filter by Date
-        # Set default range from the earliest file date to today
         if all_files:
             min_date = min(f['date'] for f in all_files)
         else:
@@ -72,11 +90,10 @@ with st.expander("🔍 Find Documents & Filter Results", expanded=True):
         )
     
     with sort_col:
-        # 3. Sort by Age
         sort_order = st.selectbox(
             "Sort by",
             ("Newest first", "Oldest first"),
-            label_visibility="collapsed" # Hide label as context is clear
+            label_visibility="collapsed"
         )
 
 st.divider()
@@ -106,7 +123,6 @@ if all_files:
     if not filtered_files:
         st.info("No documents match your current search and filter criteria.")
     else:
-        # Use a placeholder for the preview area
         preview_placeholder = st.empty()
 
         for file in filtered_files:
@@ -114,23 +130,18 @@ if all_files:
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.subheader(file['name'])
-                    st.caption(f"Last Modified: {file['datetime'].strftime('%d %B %Y, %I:%M %p')}")
+                    st.caption(f"Saved On: {file['datetime'].strftime('%d %B %Y, %I:%M %p')}")
                 
                 with col2:
-                    # Read file content once for both buttons
-                    try:
-                        with open(file['path'], 'r', encoding='utf-8') as f:
-                            html_content = f.read()
-                    except Exception as e:
-                        st.error(f"Could not read {file['name']}")
-                        continue
+                    # --- START: MODIFIED BUTTON LOGIC ---
+                    # The HTML content is already loaded from the database
+                    html_content = file['html_content']
 
                     # View Button: Displays content in the placeholder
                     if st.button("👁️ View", key=f"view_{file['name']}", use_container_width=True):
                         with preview_placeholder.container(border=True):
                             st.header(f"📄 Preview: {file['name']}")
                             st.components.v1.html(html_content, height=600, scrolling=True)
-                            # Add a close button inside the preview
                             if st.button("❌ Close Preview", key=f"close_{file['name']}"):
                                 preview_placeholder.empty()
 
@@ -143,9 +154,9 @@ if all_files:
                         key=f"dl_{file['name']}",
                         use_container_width=True
                     )
+                    # --- END: MODIFIED BUTTON LOGIC ---
 else:
-    # This message will show if the directory is empty or doesn't exist.
-    st.info("There are no previously saved documents to display in the specified directory.")
+    st.info("There are no documents to display from the database.")
 
 def hide_sidebar():
     st.markdown("""
